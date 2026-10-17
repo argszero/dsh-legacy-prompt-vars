@@ -1,0 +1,69 @@
+{
+  "name": "@argszero/dsh-legacy-prompt-vars",
+  "description": "Keep a profile that was written against an older dsh release from failing every turn with `unknown prompt variable \"{{cwd}}\"`. Discussions #9962 and #9948 report that after upgrading, every run dies before any model request: `unknown prompt variable \"{{cwd}}\" in section \"deployment:persona-suffix\"; registered variables: provider, model`. The interpolation in packages/core/system-prompt/src/index.ts is strict by design — an unregistered name is not left as literal text, it throws during request assembly — and 0.2.0-rc.2 was the last release that registered `cwd` (packages/core/agent-loop/src/index.ts:372 `ctx.systemPrompt.variable('cwd', context => context.agent?.session.header.cwd)`). Commit 79bd3d8da7 (feat(session): centralize working directories and directory context, first tagged dsh-v0.2.1-alpha.2, not an ancestor of dsh-v0.2.0-rc.2) removed that registration and the factory `personaSuffix: Your working directory is {{cwd}}.` together, and replaced the duty with the required runtime context `working-directory:current` (packages/session/working-directory/src/index.ts). So a `{{cwd}}` reference can only come from a layer an upgrade does not rewrite — the profile's own cordis.patch.yml, the home patch, or a preset row — and there it is frozen permanently, because the config editor writes a whole `config` object back (packages/boot/config-editor) rather than the one field that was edited. The real repair is to delete that line from the file `dsh --profile <name> --dump-config` names, and the upstream fix is to clean dead references at load time or stop materializing defaults into the user layer. What a plugin can do is register the missing name, because `ctx.systemPrompt.variable(name, provider)` is a public API and nothing in the current tree registers `cwd`. This plugin registers exactly that one name — the pre-removal variable set was exactly `cwd`, verified by a full grep of the dsh-v0.2.0-rc.2 tag — reading the effective working directory from the `workingDirectory` service, then the session header, then a launch-directory fallback, and it never returns undefined and never throws, because either would only replace one fatal assembly error with another. Zero runtime dependencies.",
+  "version": "0.1.0",
+  "publishConfig": {
+    "access": "public"
+  },
+  "type": "module",
+  "main": "lib/index.js",
+  "types": "lib/types/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./lib/types/index.d.ts",
+      "default": "./lib/index.js"
+    },
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "lib/**/*.js",
+    "lib/types/**/*.d.ts",
+    "cordis.patch.yml",
+    "README.md",
+    "LICENSE"
+  ],
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/argszero/dsh-legacy-prompt-vars.git"
+  },
+  "homepage": "https://github.com/argszero/dsh-legacy-prompt-vars#readme",
+  "bugs": {
+    "url": "https://github.com/argszero/dsh-legacy-prompt-vars/issues"
+  },
+  "keywords": [
+    "cordis",
+    "deepseek-harness",
+    "dsh",
+    "plugin",
+    "system-prompt",
+    "prompt-variable",
+    "profile",
+    "upgrade"
+  ],
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    }
+  },
+  "peerDependencies": {
+    "@deepseek-ai/cordis": "^4.0.2 || >=4.0.5-alpha.1 <5",
+    "@deepseek-ai/dsh-system-prompt": ">=0.1.7-rc.2 <0.2.1 || >=0.2.1-alpha.2 <0.3.0"
+  },
+  "devDependencies": {
+    "@deepseek-ai/cordis": "^4.0.4",
+    "@deepseek-ai/dsh-system-prompt": "^0.2.0-rc.2",
+    "@types/node": "^24.19.1",
+    "typescript": "^5.9.3"
+  },
+  "scripts": {
+    "build": "tsc",
+    "pretest": "tsc",
+    "test": "node --test \"test/*.spec.mjs\"",
+    "test:inject": "node scripts/inject-defects.mjs",
+    "prepublishOnly": "tsc"
+  },
+  "engines": {
+    "node": "^22.19 || >=24"
+  }
+}

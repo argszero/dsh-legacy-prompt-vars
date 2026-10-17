@@ -1,0 +1,38 @@
+# The @argszero/dsh-legacy-prompt-vars bundle patch: mount and go.
+#
+# Discussions #9962 and #9948 report that after upgrading, every run dies before
+# any model request with:
+#
+#   unknown prompt variable "{{cwd}}" in section "deployment:persona-suffix";
+#   registered variables: provider, model
+#
+# The interpolation in packages/core/system-prompt/src/index.ts is strict on
+# purpose — an unregistered {{name}} is not left as literal text — and
+# 0.2.0-rc.2 was the last release that registered `cwd`
+# (packages/core/agent-loop/src/index.ts:372,
+# `ctx.systemPrompt.variable('cwd', context => context.agent?.session.header.cwd)`).
+# Commit 79bd3d8da7 removed that registration together with the factory
+# `personaSuffix: Your working directory is {{cwd}}.`, and gave the duty to the
+# required runtime context `working-directory:current`.
+#
+# A `{{cwd}}` that survives an upgrade therefore lives in a layer an upgrade does
+# not rewrite — the profile's own cordis.patch.yml, the home patch, or a preset
+# row — and stays there, because the config editor writes a whole `config`
+# object back instead of the one field that was edited. The real repair is to
+# delete that line from the file `dsh --profile <name> --dump-config` names; the
+# upstream fix is to clean dead references at load time, or to stop
+# materializing defaults into the user layer. Neither is a line a plugin can
+# write.
+#
+# What a plugin can do is register the missing name: `ctx.systemPrompt.variable`
+# is a public API, and nothing in the current tree registers `cwd`. This row does
+# exactly that, and puts the registration back on disposal.
+#
+# `inject: ['systemPrompt']` is declared in the plugin, so this row activates
+# once the prompt service exists; the `workingDirectory` service is read at call
+# time and is deliberately not a dependency, because a composition without that
+# package is one this shim must still work in.
+
+- insert:
+    - id: legacy-prompt-vars
+      name: '@argszero/dsh-legacy-prompt-vars'
